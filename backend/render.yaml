@@ -1,0 +1,55 @@
+services:
+  - type: web
+    name: hirenest-api
+    env: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: DB_HOST
+        fromDatabase:
+          name: hirenest-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: hirenest-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: hirenest-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: hirenest-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: hirenest-db
+          property: password
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: CORS_ORIGIN
+        value: https://hirenest.vercel.app
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 900000
+      - key: RATE_LIMIT_MAX
+        value: 100
+
+databases:
+  - name: hirenest-db
+    plan: free
+    region: oregon
+    databaseName: hirenest_db
+    user: hirenest_user
