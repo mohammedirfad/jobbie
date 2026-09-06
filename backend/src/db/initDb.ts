@@ -1,9 +1,8 @@
 /**
  * initDb.ts — runs migrations + seeds on every server startup.
  *
- * Safe to call from index.ts because it uses the shared pool (does NOT call pool.end()).
- * Uses CREATE TABLE IF NOT EXISTS so migrations are fully idempotent.
- * Seed is skipped if data already exists.
+ * Fully idempotent: CREATE TABLE IF NOT EXISTS, seed skips if data exists.
+ * Called automatically from index.ts — no shell access needed on Render.
  */
 
 import { query, testConnection } from '../config/database';
@@ -13,11 +12,29 @@ import bcrypt from 'bcryptjs';
 export const runMigrations = async (): Promise<void> => {
   console.log('🔄 Running migrations…');
 
-  await query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+  // uuid-ossp may not be available on all managed Postgres plans.
+  // Fall back to gen_random_uuid() (built-in since Postgres 13) if it fails.
+  try {
+    await query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+    console.log('   uuid-ossp extension ready');
+  } catch {
+    console.warn('   uuid-ossp unavailable — switching DEFAULT to gen_random_uuid()');
+  }
+
+  // Determine which UUID function to use
+  const uuidDefault = await (async () => {
+    try {
+      await query(`SELECT uuid_generate_v4()`);
+      return 'uuid_generate_v4()';
+    } catch {
+      return 'gen_random_uuid()';
+    }
+  })();
+  console.log(`   UUID function: ${uuidDefault}`);
 
   await query(`
     CREATE TABLE IF NOT EXISTS users (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id UUID PRIMARY KEY DEFAULT ${uuidDefault},
       name VARCHAR(255) NOT NULL,
       email VARCHAR(255) UNIQUE NOT NULL,
       password_hash VARCHAR(255) NOT NULL,
@@ -34,7 +51,7 @@ export const runMigrations = async (): Promise<void> => {
 
   await query(`
     CREATE TABLE IF NOT EXISTS categories (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id UUID PRIMARY KEY DEFAULT ${uuidDefault},
       name VARCHAR(255) UNIQUE NOT NULL,
       slug VARCHAR(255) UNIQUE NOT NULL,
       icon VARCHAR(100),
@@ -46,7 +63,7 @@ export const runMigrations = async (): Promise<void> => {
 
   await query(`
     CREATE TABLE IF NOT EXISTS jobs (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id UUID PRIMARY KEY DEFAULT ${uuidDefault},
       title VARCHAR(255) NOT NULL,
       company VARCHAR(255) NOT NULL,
       company_logo TEXT,
@@ -73,7 +90,7 @@ export const runMigrations = async (): Promise<void> => {
 
   await query(`
     CREATE TABLE IF NOT EXISTS applications (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      id UUID PRIMARY KEY DEFAULT ${uuidDefault},
       job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       applicant_name VARCHAR(255),
@@ -93,14 +110,14 @@ export const runMigrations = async (): Promise<void> => {
   `);
 
   const indexes = [
-    `CREATE INDEX IF NOT EXISTS idx_jobs_category   ON jobs(category_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_jobs_active      ON jobs(is_active)`,
-    `CREATE INDEX IF NOT EXISTS idx_jobs_featured    ON jobs(is_featured)`,
-    `CREATE INDEX IF NOT EXISTS idx_jobs_experience  ON jobs(experience_level)`,
-    `CREATE INDEX IF NOT EXISTS idx_jobs_type        ON jobs(job_type)`,
-    `CREATE INDEX IF NOT EXISTS idx_apps_user        ON applications(user_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_apps_job         ON applications(job_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_users_email      ON users(email)`,
+    `CREATE INDEX IF NOT EXISTS idx_jobs_category  ON jobs(category_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_jobs_active     ON jobs(is_active)`,
+    `CREATE INDEX IF NOT EXISTS idx_jobs_featured   ON jobs(is_featured)`,
+    `CREATE INDEX IF NOT EXISTS idx_jobs_experience ON jobs(experience_level)`,
+    `CREATE INDEX IF NOT EXISTS idx_jobs_type       ON jobs(job_type)`,
+    `CREATE INDEX IF NOT EXISTS idx_apps_user       ON applications(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_apps_job        ON applications(job_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_users_email     ON users(email)`,
   ];
   for (const idx of indexes) await query(idx);
 
@@ -148,8 +165,7 @@ export const runSeed = async (): Promise<void> => {
   const catIds: Record<string, string> = {};
   for (const c of categories) {
     const r = await query(
-      `INSERT INTO categories (name, slug, icon, description)
-       VALUES ($1,$2,$3,$4) RETURNING id`,
+      `INSERT INTO categories (name, slug, icon, description) VALUES ($1,$2,$3,$4) RETURNING id`,
       [c.name, c.slug, c.icon, c.description]
     );
     catIds[c.slug] = r.rows[0].id;
@@ -157,16 +173,14 @@ export const runSeed = async (): Promise<void> => {
 
   const adminHash = await bcrypt.hash('Admin@123', 12);
   const adminRes = await query(
-    `INSERT INTO users (name, email, password_hash, role)
-     VALUES ($1,$2,$3,'admin') RETURNING id`,
+    `INSERT INTO users (name, email, password_hash, role) VALUES ($1,$2,$3,'admin') RETURNING id`,
     ['Admin User', 'admin@hirenest.io', adminHash]
   );
   const adminId = adminRes.rows[0].id;
 
   const userHash = await bcrypt.hash('User@123', 12);
   const userRes = await query(
-    `INSERT INTO users (name, email, password_hash, role, phone)
-     VALUES ($1,$2,$3,'user',$4) RETURNING id`,
+    `INSERT INTO users (name, email, password_hash, role, phone) VALUES ($1,$2,$3,'user',$4) RETURNING id`,
     ['John Doe', 'john@example.com', userHash, '+1-555-0100']
   );
   const demoUserId = userRes.rows[0].id;
@@ -176,90 +190,90 @@ export const runSeed = async (): Promise<void> => {
       title: 'Senior React Developer', company: 'TechVision Inc.', location: 'San Francisco, CA',
       job_type: 'full-time', experience_level: 'senior', category_slug: 'technology',
       description: 'We are looking for a Senior React Developer to join our product team and help build world-class web applications.',
-      requirements: ['5+ years of React experience','Strong TypeScript skills','Experience with Redux/Zustand'],
-      responsibilities: ['Build and maintain React applications','Write clean TypeScript code','Conduct code reviews'],
-      skills: ['React','TypeScript','Redux','GraphQL','Tailwind CSS'],
+      requirements: ['5+ years of React experience', 'Strong TypeScript skills', 'Experience with Redux/Zustand'],
+      responsibilities: ['Build and maintain React applications', 'Write clean TypeScript code', 'Conduct code reviews'],
+      skills: ['React', 'TypeScript', 'Redux', 'GraphQL', 'Tailwind CSS'],
       salary_min: 120000, salary_max: 160000, is_featured: true,
     },
     {
       title: 'Full Stack Engineer', company: 'CloudBase Systems', location: 'Remote',
       job_type: 'remote', experience_level: 'mid', category_slug: 'technology',
       description: 'Join our distributed team building scalable SaaS products.',
-      requirements: ['3+ years full-stack experience','Node.js and React proficiency','PostgreSQL experience'],
-      responsibilities: ['Develop end-to-end features','Design and implement APIs','Optimize database queries'],
-      skills: ['Node.js','React','PostgreSQL','Docker','AWS','TypeScript'],
+      requirements: ['3+ years full-stack experience', 'Node.js and React proficiency', 'PostgreSQL experience'],
+      responsibilities: ['Develop end-to-end features', 'Design and implement APIs', 'Optimize database queries'],
+      skills: ['Node.js', 'React', 'PostgreSQL', 'Docker', 'AWS', 'TypeScript'],
       salary_min: 90000, salary_max: 130000, is_featured: true,
     },
     {
       title: 'UI/UX Designer', company: 'PixelCraft Studio', location: 'New York, NY',
       job_type: 'full-time', experience_level: 'mid', category_slug: 'design',
       description: 'We need a talented UI/UX Designer to craft intuitive and beautiful user experiences.',
-      requirements: ['3+ years in UI/UX design','Figma mastery','Experience with design systems'],
-      responsibilities: ['Create wireframes and prototypes','Conduct user research','Maintain the design system'],
-      skills: ['Figma','Design Systems','Prototyping','User Research'],
+      requirements: ['3+ years in UI/UX design', 'Figma mastery', 'Experience with design systems'],
+      responsibilities: ['Create wireframes and prototypes', 'Conduct user research', 'Maintain the design system'],
+      skills: ['Figma', 'Design Systems', 'Prototyping', 'User Research'],
       salary_min: 80000, salary_max: 110000, is_featured: true,
     },
     {
       title: 'DevOps Engineer', company: 'Nexus Cloud', location: 'Austin, TX',
       job_type: 'full-time', experience_level: 'senior', category_slug: 'technology',
       description: 'Drive reliability and automation across our cloud infrastructure.',
-      requirements: ['4+ years DevOps/SRE experience','Kubernetes and Docker','Terraform IaC'],
-      responsibilities: ['Manage cloud infrastructure','Build CI/CD pipelines','Implement monitoring'],
-      skills: ['Kubernetes','Docker','Terraform','AWS','GitHub Actions'],
+      requirements: ['4+ years DevOps/SRE experience', 'Kubernetes and Docker', 'Terraform IaC'],
+      responsibilities: ['Manage cloud infrastructure', 'Build CI/CD pipelines', 'Implement monitoring'],
+      skills: ['Kubernetes', 'Docker', 'Terraform', 'AWS', 'GitHub Actions'],
       salary_min: 130000, salary_max: 170000, is_featured: false,
     },
     {
       title: 'Digital Marketing Manager', company: 'GrowthLab Agency', location: 'Chicago, IL',
       job_type: 'full-time', experience_level: 'mid', category_slug: 'marketing',
       description: 'Lead our digital marketing strategy across paid, organic, and social channels.',
-      requirements: ['4+ years digital marketing','Google Ads certified','SEO/SEM expertise'],
-      responsibilities: ['Manage paid campaigns','Drive SEO strategy','Report on KPIs'],
-      skills: ['Google Ads','Meta Ads','SEO','HubSpot','Google Analytics'],
+      requirements: ['4+ years digital marketing', 'Google Ads certified', 'SEO/SEM expertise'],
+      responsibilities: ['Manage paid campaigns', 'Drive SEO strategy', 'Report on KPIs'],
+      skills: ['Google Ads', 'Meta Ads', 'SEO', 'HubSpot', 'Google Analytics'],
       salary_min: 70000, salary_max: 95000, is_featured: false,
     },
     {
       title: 'Product Manager', company: 'InnovateTech', location: 'Boston, MA',
       job_type: 'full-time', experience_level: 'senior', category_slug: 'technology',
       description: 'Define and execute the product roadmap for our B2B SaaS platform.',
-      requirements: ['5+ years product management','Agile/Scrum experience','Strong data analysis'],
-      responsibilities: ['Own the product roadmap','Write detailed PRDs','Coordinate releases'],
-      skills: ['Product Strategy','Agile','Jira','SQL','Roadmapping'],
+      requirements: ['5+ years product management', 'Agile/Scrum experience', 'Strong data analysis'],
+      responsibilities: ['Own the product roadmap', 'Write detailed PRDs', 'Coordinate releases'],
+      skills: ['Product Strategy', 'Agile', 'Jira', 'SQL', 'Roadmapping'],
       salary_min: 110000, salary_max: 150000, is_featured: true,
     },
     {
       title: 'Backend Node.js Developer', company: 'DataStream Labs', location: 'Seattle, WA',
       job_type: 'full-time', experience_level: 'mid', category_slug: 'technology',
       description: 'Build robust and scalable backend services for our real-time analytics platform.',
-      requirements: ['3+ years Node.js/TypeScript','PostgreSQL and Redis','REST API design'],
-      responsibilities: ['Build microservices','Design database schemas','Write unit tests'],
-      skills: ['Node.js','TypeScript','PostgreSQL','Redis','Docker'],
+      requirements: ['3+ years Node.js/TypeScript', 'PostgreSQL and Redis', 'REST API design'],
+      responsibilities: ['Build microservices', 'Design database schemas', 'Write unit tests'],
+      skills: ['Node.js', 'TypeScript', 'PostgreSQL', 'Redis', 'Docker'],
       salary_min: 95000, salary_max: 125000, is_featured: false,
     },
     {
       title: 'HR Business Partner', company: 'PeopleFirst Corp', location: 'Atlanta, GA',
       job_type: 'full-time', experience_level: 'mid', category_slug: 'human-resources',
       description: 'Partner with business leaders to drive talent strategy and employee engagement.',
-      requirements: ['4+ years HRBP experience','PHR certification preferred','HRIS experience'],
-      responsibilities: ['Advise managers on HR best practices','Lead talent reviews','Drive DEI initiatives'],
-      skills: ['Talent Management','Employee Relations','Workday','Coaching'],
+      requirements: ['4+ years HRBP experience', 'PHR certification preferred', 'HRIS experience'],
+      responsibilities: ['Advise managers on HR best practices', 'Lead talent reviews', 'Drive DEI initiatives'],
+      skills: ['Talent Management', 'Employee Relations', 'Workday', 'Coaching'],
       salary_min: 75000, salary_max: 100000, is_featured: false,
     },
     {
       title: 'Frontend React Intern', company: 'StartupHub', location: 'Remote',
       job_type: 'internship', experience_level: 'entry', category_slug: 'technology',
       description: 'Great opportunity for a student or recent graduate to gain hands-on experience.',
-      requirements: ['Basic React knowledge','HTML/CSS/JS fundamentals','Available for 6 months'],
-      responsibilities: ['Build UI components','Fix bugs','Participate in standups'],
-      skills: ['React','JavaScript','CSS','Git'],
+      requirements: ['Basic React knowledge', 'HTML/CSS/JS fundamentals', 'Available for 6 months'],
+      responsibilities: ['Build UI components', 'Fix bugs', 'Participate in standups'],
+      skills: ['React', 'JavaScript', 'CSS', 'Git'],
       salary_min: 2000, salary_max: 3000, is_featured: false,
     },
     {
       title: 'Data Scientist', company: 'Analytix AI', location: 'San Jose, CA',
       job_type: 'full-time', experience_level: 'senior', category_slug: 'technology',
       description: 'Apply ML and statistical techniques to extract insights from large datasets.',
-      requirements: ['5+ years data science','Python and R proficiency','ML frameworks (TensorFlow/PyTorch)'],
-      responsibilities: ['Build and deploy ML models','Conduct exploratory data analysis','Present findings'],
-      skills: ['Python','TensorFlow','PyTorch','SQL','Spark','Statistics'],
+      requirements: ['5+ years data science', 'Python and R proficiency', 'ML frameworks (TensorFlow/PyTorch)'],
+      responsibilities: ['Build and deploy ML models', 'Conduct exploratory data analysis', 'Present findings'],
+      skills: ['Python', 'TensorFlow', 'PyTorch', 'SQL', 'Spark', 'Statistics'],
       salary_min: 140000, salary_max: 180000, is_featured: true,
     },
   ];
@@ -284,10 +298,11 @@ export const runSeed = async (): Promise<void> => {
   const firstJob = await query('SELECT id FROM jobs LIMIT 1');
   if (firstJob.rows.length > 0) {
     await query(
-      `INSERT INTO applications (job_id, user_id, applicant_name, applicant_email, applicant_phone, cover_letter, status)
+      `INSERT INTO applications
+         (job_id, user_id, applicant_name, applicant_email, applicant_phone, cover_letter, status)
        VALUES ($1,$2,$3,$4,$5,$6,'pending')`,
       [firstJob.rows[0].id, demoUserId, 'John Doe', 'john@example.com', '+1-555-0100',
-       'I am very excited about this opportunity.']
+        'I am very excited about this opportunity.']
     );
   }
 
@@ -296,16 +311,10 @@ export const runSeed = async (): Promise<void> => {
   console.log('   User  → john@example.com  / User@123');
 };
 
-// ─── Combined init (called from index.ts) ────────────────────────────────────
+// ─── Combined init — called automatically from index.ts on every boot ─────────
 export const initDatabase = async (): Promise<void> => {
-  // Step 1: verify we can actually reach the database.
-  // This throws (and crashes the server) if the connection fails,
-  // which surfaces the real error instead of silently booting without a DB.
+  // Verify DB is reachable — throws immediately if not, so we get a clear error
   await testConnection();
-
-  // Step 2: run migrations (idempotent — safe to re-run on every boot)
   await runMigrations();
-
-  // Step 3: seed only if tables are empty
   await runSeed();
 };

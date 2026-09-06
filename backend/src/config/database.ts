@@ -5,53 +5,66 @@ dotenv.config();
 
 const isProd = process.env.NODE_ENV === 'production';
 
-// ─── Connection config ────────────────────────────────────────────────────────
-// Render injects DATABASE_URL (Internal) automatically when you link a database
-// to a web service. Fall back to individual DB_* vars for local dev.
-const poolConfig = process.env.DATABASE_URL
-  ? {
+// ─── Log which connection method we're using ──────────────────────────────────
+if (process.env.DATABASE_URL) {
+  console.log('🔌 DB: using DATABASE_URL (Render linked database)');
+} else if (process.env.DB_HOST) {
+  console.log(`🔌 DB: using DB_HOST=${process.env.DB_HOST} DB_NAME=${process.env.DB_NAME}`);
+} else {
+  console.warn('⚠️  DB: no DATABASE_URL or DB_HOST set — falling back to localhost (will fail in prod!)');
+}
+
+// ─── Pool config ──────────────────────────────────────────────────────────────
+// Render injects DATABASE_URL automatically when you link a Postgres database
+// to your web service ("Add from Database" in the dashboard).
+// Individual DB_* vars work too (for local dev or manual config).
+const pool = process.env.DATABASE_URL
+  ? new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false }, // required for Render managed Postgres
-      max: 20,
+      ssl: { rejectUnauthorized: false },
+      max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
-    }
-  : {
+    })
+  : new Pool({
       host:     process.env.DB_HOST     || 'localhost',
       port:     parseInt(process.env.DB_PORT || '5432'),
       database: process.env.DB_NAME     || 'hirenest_db',
       user:     process.env.DB_USER     || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
-      max: 20,
+      password: process.env.DB_PASSWORD || '',
+      max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
       ssl: isProd ? { rejectUnauthorized: false } : false,
-    };
-
-const pool = new Pool(poolConfig);
+    });
 
 pool.on('error', (err) => {
-  console.error('Unexpected DB pool error:', err);
-  process.exit(-1);
+  console.error('Unexpected DB pool error:', err.message);
 });
 
-// ─── Verify the pool can actually connect (called once at startup) ─────────────
+// ─── Verify connectivity (called once at startup) ─────────────────────────────
 export const testConnection = async (): Promise<void> => {
-  const client = await pool.connect(); // throws if DB is unreachable
+  const client = await pool.connect();
   client.release();
   console.log('✅ Database connection verified');
 };
 
+// ─── Query helper ─────────────────────────────────────────────────────────────
 export const query = async (text: string, params?: unknown[]) => {
-  const start = Date.now();
-  const res = await pool.query(text, params);
-  if (!isProd) {
-    const duration = Date.now() - start;
-    console.log('Executed query', { text: text.slice(0, 80), duration, rows: res.rowCount });
+  try {
+    const start = Date.now();
+    const res = await pool.query(text, params);
+    if (!isProd) {
+      console.log('query', { text: text.slice(0, 80), ms: Date.now() - start, rows: res.rowCount });
+    }
+    return res;
+  } catch (err: unknown) {
+    // Always log full DB errors so they appear in Render logs
+    const e = err as Error;
+    console.error('DB query error:', e.message, '| query:', text.slice(0, 120));
+    throw err;
   }
-  return res;
 };
 
 export const getClient = () => pool.connect();
-
 export default pool;

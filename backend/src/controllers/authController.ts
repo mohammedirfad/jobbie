@@ -44,7 +44,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     sendSuccess(res, 'Registration successful', { user, accessToken }, 201);
   } catch (err) {
-    console.error('Register error:', err);
+    const e = err as Error;
+    console.error('Register error:', e.message, e.stack);
     sendError(res, 'Registration failed', 500);
   }
 };
@@ -87,7 +88,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const { password_hash: _, ...safeUser } = user;
     sendSuccess(res, 'Login successful', { user: safeUser, accessToken });
   } catch (err) {
-    console.error('Login error:', err);
+    const e = err as Error;
+    console.error('Login error:', e.message, e.stack);
     sendError(res, 'Login failed', 500);
   }
 };
@@ -134,7 +136,8 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
 
     sendSuccess(res, 'Token refreshed', { accessToken: newAccessToken });
   } catch (err) {
-    console.error('Refresh token error:', err);
+    const e = err as Error;
+    console.error('Refresh token error:', e.message, e.stack);
     sendError(res, 'Token refresh failed', 500);
   }
 };
