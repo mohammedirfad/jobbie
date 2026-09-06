@@ -15,6 +15,7 @@ import { JobListingPage }     from './pages/user/JobListingPage';
 import { JobDetailPage }      from './pages/user/JobDetailPage';
 import { MyApplicationsPage } from './pages/user/MyApplicationsPage';
 import { CategoriesPage }     from './pages/user/CategoriesPage';
+import { ProfilePage }        from './pages/user/ProfilePage';
 
 // Admin pages
 import { AdminDashboard }       from './pages/admin/AdminDashboard';
@@ -44,6 +45,7 @@ function App() {
             {/* Protected user routes */}
             <Route element={<ProtectedRoute />}>
               <Route path="/my-applications" element={<MyApplicationsPage />} />
+              <Route path="/profile"         element={<ProfilePage />} />
             </Route>
           </Route>
 
