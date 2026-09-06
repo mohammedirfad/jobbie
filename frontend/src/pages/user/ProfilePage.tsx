@@ -51,7 +51,7 @@ export const ProfilePage = () => {
   const dispatch = useAppDispatch();
   const toast    = useToast();
 
-  const { user, loading: authLoading } = useAppSelector(s => s.auth);
+  const { user, loading: authLoading, profileLoaded } = useAppSelector(s => s.auth);
   const { myApplications, pagination } = useAppSelector(s => s.applications);
 
   const [activeTab,      setActiveTab]      = useState<'profile' | 'applications' | 'security'>('profile');
@@ -126,7 +126,7 @@ export const ProfilePage = () => {
     return acc;
   }, {} as Record<string, number>);
 
-  if (authLoading && !user) {
+  if (authLoading && !user && !profileLoaded) {
     return <div className="min-h-screen flex items-center justify-center"><Spinner size="lg" /></div>;
   }
   if (!user) return null;
