@@ -7,7 +7,7 @@ import { AuthenticatedRequest } from '../types';
 export const applyForJob = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { job_id } = req.params;
-    const { cover_letter, resume_url } = req.body;
+    const { applicant_name, applicant_email, applicant_phone, cover_letter, resume_url, resume_filename } = req.body;
     const user_id = req.user!.id;
 
     // Check job exists and is active
@@ -40,10 +40,18 @@ export const applyForJob = async (req: AuthenticatedRequest, res: Response): Pro
     }
 
     const result = await query(
-      `INSERT INTO applications (job_id, user_id, cover_letter, resume_url)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO applications (job_id, user_id, applicant_name, applicant_email, applicant_phone, cover_letter, resume_url, resume_filename)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [job_id, user_id, cover_letter || null, resume_url || null]
+      [
+        job_id, user_id,
+        applicant_name || null,
+        applicant_email || null,
+        applicant_phone || null,
+        cover_letter || null,
+        resume_url || null,
+        resume_filename || null,
+      ]
     );
 
     sendSuccess(res, 'Application submitted successfully', result.rows[0], 201);
