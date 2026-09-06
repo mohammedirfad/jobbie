@@ -5,6 +5,17 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '.
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthenticatedRequest } from '../types';
 
+const isProd = process.env.NODE_ENV === 'production';
+
+/** Cookie options — SameSite must be 'none' for cross-origin (Render API ↔ Vercel frontend).
+ *  SameSite=None requires Secure=true, which is fine because both are HTTPS in production. */
+const cookieOptions = {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: (isProd ? 'none' : 'strict') as 'none' | 'strict',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, password, phone } = req.body;
@@ -29,12 +40,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     await query('UPDATE users SET refresh_token = $1 WHERE id = $2', [refreshToken, user.id]);
 
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('refreshToken', refreshToken, cookieOptions);
 
     sendSuccess(res, 'Registration successful', { user, accessToken }, 201);
   } catch (err) {
@@ -76,12 +82,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     await query('UPDATE users SET refresh_token = $1 WHERE id = $2', [refreshToken, user.id]);
 
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('refreshToken', refreshToken, cookieOptions);
 
     const { password_hash: _, ...safeUser } = user;
     sendSuccess(res, 'Login successful', { user: safeUser, accessToken });
@@ -129,12 +130,7 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
 
     await query('UPDATE users SET refresh_token = $1 WHERE id = $2', [newRefreshToken, user.id]);
 
-    res.cookie('refreshToken', newRefreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('refreshToken', newRefreshToken, cookieOptions);
 
     sendSuccess(res, 'Token refreshed', { accessToken: newAccessToken });
   } catch (err) {
@@ -148,7 +144,7 @@ export const logout = async (req: AuthenticatedRequest, res: Response): Promise<
     if (req.user) {
       await query('UPDATE users SET refresh_token = NULL WHERE id = $1', [req.user.id]);
     }
-    res.clearCookie('refreshToken');
+    res.clearCookie('refreshToken', cookieOptions);
     sendSuccess(res, 'Logged out successfully');
   } catch (err) {
     console.error('Logout error:', err);
