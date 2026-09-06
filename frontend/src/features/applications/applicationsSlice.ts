@@ -22,7 +22,7 @@ const initialState: ApplicationsState = {
 
 export const applyForJobThunk = createAsyncThunk(
   'applications/apply',
-  async ({ jobId, data }: { jobId: string; data: { cover_letter?: string; resume_url?: string } }, { rejectWithValue }) => {
+  async ({ jobId, data }: { jobId: string; data: import('../../api/applicationApi').ApplyPayload }, { rejectWithValue }) => {
     try {
       const res = await applicationApi.applyForJob(jobId, data);
       return res.data.data!;

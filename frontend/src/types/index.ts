@@ -55,8 +55,12 @@ export interface Application {
   id: string;
   job_id: string;
   user_id: string;
+  applicant_name?: string;
+  applicant_email?: string;
+  applicant_phone?: string;
   cover_letter?: string;
   resume_url?: string;
+  resume_filename?: string;
   status: 'pending' | 'reviewing' | 'shortlisted' | 'rejected' | 'hired';
   notes?: string;
   job_title?: string;
@@ -65,9 +69,6 @@ export interface Application {
   job_type?: string;
   company_logo?: string;
   category_name?: string;
-  applicant_name?: string;
-  applicant_email?: string;
-  applicant_phone?: string;
   created_at: string;
   updated_at?: string;
 }
