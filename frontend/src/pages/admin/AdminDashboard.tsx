@@ -66,28 +66,56 @@ export const AdminDashboard = () => {
 
       {/* Row 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Monthly chart (simplified bar) */}
+        {/* Monthly chart */}
         <div className="card p-5 lg:col-span-2">
-          <h3 className="font-bold text-slate-900 mb-4">Applications (Last 6 Months)</h3>
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="font-bold text-slate-900">Applications (Last 6 Months)</h3>
+            <span className="text-xs text-slate-400 bg-slate-50 px-2 py-1 rounded-lg">
+              Total: {monthlyApplications.reduce((sum, m) => sum + parseInt(m.count), 0)}
+            </span>
+          </div>
           {monthlyApplications.length > 0 ? (
-            <div className="flex items-end gap-2 h-32">
+            <div className="flex items-end gap-3 h-36">
               {monthlyApplications.map((m, i) => {
-                const max = Math.max(...monthlyApplications.map(x => parseInt(x.count)));
-                const h = max ? (parseInt(m.count) / max) * 100 : 0;
+                const counts = monthlyApplications.map(x => parseInt(x.count));
+                const max = Math.max(...counts);
+                // Use a minimum bar height of 8% so bars are always visible
+                const pct = max > 0 ? Math.max((parseInt(m.count) / max) * 100, 8) : 8;
+                const isMax = parseInt(m.count) === max;
                 return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <span className="text-xs text-slate-500 font-medium">{m.count}</span>
-                    <div
-                      className="w-full rounded-t-lg bg-gradient-to-t from-brand-600 to-emerald-400 transition-all duration-700"
-                      style={{ height: `${Math.max(h, 4)}%` }}
-                    />
-                    <span className="text-xs text-slate-400 whitespace-nowrap">{m.month.split(' ')[0]}</span>
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1.5 group">
+                    <span className={cn(
+                      'text-xs font-bold transition-colors',
+                      isMax ? 'text-brand-600' : 'text-slate-500'
+                    )}>
+                      {m.count}
+                    </span>
+                    <div className="w-full relative">
+                      <div
+                        className={cn(
+                          'w-full rounded-t-xl transition-all duration-700',
+                          isMax
+                            ? 'bg-gradient-to-t from-brand-600 to-emerald-400 shadow-glow'
+                            : 'bg-gradient-to-t from-brand-400/70 to-emerald-300/70'
+                        )}
+                        style={{ height: `${(pct / 100) * 112}px` }}
+                      />
+                    </div>
+                    <span className="text-xs text-slate-400 font-medium whitespace-nowrap">
+                      {m.month.split(' ')[0]}
+                    </span>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <p className="text-slate-400 text-sm text-center py-8">No data yet</p>
+            <div className="flex flex-col items-center justify-center h-36 text-center">
+              <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mb-3">
+                <FileText className="w-6 h-6 text-slate-400" />
+              </div>
+              <p className="text-slate-500 text-sm font-medium">No applications yet</p>
+              <p className="text-slate-400 text-xs mt-0.5">Data will appear here once users start applying</p>
+            </div>
           )}
         </div>
 
