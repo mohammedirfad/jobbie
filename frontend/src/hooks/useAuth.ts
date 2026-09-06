@@ -7,10 +7,28 @@ export const useAuth = () => {
   const auth = useAppSelector(s => s.auth);
 
   useEffect(() => {
-    if (auth.isAuthenticated && !auth.user && auth.accessToken) {
+    // Only fetch profile if:
+    // 1. User claims to be authenticated (has token in localStorage)
+    // 2. Profile has NOT been loaded yet (prevents re-fires)
+    // 3. No user data yet
+    // 4. Not already loading
+    if (
+      auth.isAuthenticated &&
+      auth.accessToken &&
+      !auth.user &&
+      !auth.profileLoaded &&
+      !auth.loading
+    ) {
       dispatch(getProfileThunk());
     }
-  }, [auth.isAuthenticated, auth.user, auth.accessToken, dispatch]);
+  }, [
+    auth.isAuthenticated,
+    auth.accessToken,
+    auth.user,
+    auth.profileLoaded,
+    auth.loading,
+    dispatch,
+  ]);
 
   return auth;
 };

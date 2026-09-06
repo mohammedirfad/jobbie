@@ -7,6 +7,7 @@ interface AuthState {
   accessToken: string | null;
   isAuthenticated: boolean;
   loading: boolean;
+  profileLoaded: boolean; // ← prevents useAuth re-firing indefinitely
   error: string | null;
 }
 
@@ -15,6 +16,7 @@ const initialState: AuthState = {
   accessToken: localStorage.getItem('accessToken'),
   isAuthenticated: !!localStorage.getItem('accessToken'),
   loading: false,
+  profileLoaded: false,
   error: null,
 };
 
@@ -26,7 +28,10 @@ export const loginThunk = createAsyncThunk(
       return res.data.data!;
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
-      return rejectWithValue(e.response?.data?.message || 'Login failed');
+      // Surface the actual server message, not a generic fallback
+      return rejectWithValue(
+        e.response?.data?.message || 'Invalid email or password'
+      );
     }
   }
 );
@@ -39,7 +44,9 @@ export const registerThunk = createAsyncThunk(
       return res.data.data!;
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
-      return rejectWithValue(e.response?.data?.message || 'Registration failed');
+      return rejectWithValue(
+        e.response?.data?.message || 'Registration failed. Please try again.'
+      );
     }
   }
 );
@@ -56,7 +63,7 @@ export const getProfileThunk = createAsyncThunk(
       return res.data.data!;
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
-      return rejectWithValue(e.response?.data?.message || 'Failed to fetch profile');
+      return rejectWithValue(e.response?.data?.message || 'Session expired');
     }
   }
 );
@@ -74,52 +81,81 @@ const authSlice = createSlice({
       state.user = null;
       state.accessToken = null;
       state.isAuthenticated = false;
+      state.profileLoaded = false;
       state.error = null;
       localStorage.removeItem('accessToken');
     },
     clearError: (state) => { state.error = null; },
   },
   extraReducers: (builder) => {
-    // Login
-    builder.addCase(loginThunk.pending, (state) => { state.loading = true; state.error = null; });
+    // ── Login ──────────────────────────────────────────────────────────────
+    builder.addCase(loginThunk.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    });
     builder.addCase(loginThunk.fulfilled, (state, action) => {
       state.loading = false;
       state.user = action.payload.user;
       state.accessToken = action.payload.accessToken;
       state.isAuthenticated = true;
+      state.profileLoaded = true;
       localStorage.setItem('accessToken', action.payload.accessToken);
     });
     builder.addCase(loginThunk.rejected, (state, action) => {
       state.loading = false;
       state.error = action.payload as string;
+      // Clear any stale token on login failure
+      state.accessToken = null;
+      state.isAuthenticated = false;
+      state.profileLoaded = false;
+      localStorage.removeItem('accessToken');
     });
-    // Register
-    builder.addCase(registerThunk.pending, (state) => { state.loading = true; state.error = null; });
+
+    // ── Register ───────────────────────────────────────────────────────────
+    builder.addCase(registerThunk.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    });
     builder.addCase(registerThunk.fulfilled, (state, action) => {
       state.loading = false;
       state.user = action.payload.user;
       state.accessToken = action.payload.accessToken;
       state.isAuthenticated = true;
+      state.profileLoaded = true;
       localStorage.setItem('accessToken', action.payload.accessToken);
     });
     builder.addCase(registerThunk.rejected, (state, action) => {
       state.loading = false;
       state.error = action.payload as string;
     });
-    // Logout
+
+    // ── Logout ─────────────────────────────────────────────────────────────
     builder.addCase(logoutThunk.fulfilled, (state) => {
+      state.user = null;
+      state.accessToken = null;
+      state.isAuthenticated = false;
+      state.profileLoaded = false;
+      localStorage.removeItem('accessToken');
+    });
+
+    // ── Get Profile ────────────────────────────────────────────────────────
+    builder.addCase(getProfileThunk.pending, (state) => {
+      state.loading = true;
+    });
+    builder.addCase(getProfileThunk.fulfilled, (state, action) => {
+      state.loading = false;
+      state.user = action.payload;
+      state.profileLoaded = true;
+    });
+    builder.addCase(getProfileThunk.rejected, (state) => {
+      state.loading = false;
+      state.profileLoaded = true; // ← CRITICAL: mark as loaded even on failure
+      // If profile fails (expired token), clear auth state
       state.user = null;
       state.accessToken = null;
       state.isAuthenticated = false;
       localStorage.removeItem('accessToken');
     });
-    // Get profile
-    builder.addCase(getProfileThunk.pending, (state) => { state.loading = true; });
-    builder.addCase(getProfileThunk.fulfilled, (state, action) => {
-      state.loading = false;
-      state.user = action.payload;
-    });
-    builder.addCase(getProfileThunk.rejected, (state) => { state.loading = false; });
   },
 });
 
