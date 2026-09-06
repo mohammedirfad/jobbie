@@ -12,26 +12,11 @@ services:
         value: production
       - key: PORT
         value: 10000
-      - key: DB_HOST
+      # Single connection string — avoids any host/port/name parsing issues
+      - key: DATABASE_URL
         fromDatabase:
           name: hirenest-db
-          property: host
-      - key: DB_PORT
-        fromDatabase:
-          name: hirenest-db
-          property: port
-      - key: DB_NAME
-        fromDatabase:
-          name: hirenest-db
-          property: database
-      - key: DB_USER
-        fromDatabase:
-          name: hirenest-db
-          property: user
-      - key: DB_PASSWORD
-        fromDatabase:
-          name: hirenest-db
-          property: password
+          property: connectionString
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
