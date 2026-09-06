@@ -33,18 +33,22 @@ app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// ─── Rate limiting ────────────────────────────────────────────────────────────
+// ─── Rate limiting (disabled in dev, strict in prod) ─────────────────────────
+const isDev = process.env.NODE_ENV !== 'production';
+
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
-  max: parseInt(process.env.RATE_LIMIT_MAX || '100'),
+  windowMs: isDev ? 60 * 1000 : parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
+  max: isDev ? 2000 : parseInt(process.env.RATE_LIMIT_MAX || '100'),
+  skip: () => isDev, // skip entirely in development
   message: { success: false, message: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
+  windowMs: isDev ? 60 * 1000 : 15 * 60 * 1000,
+  max: isDev ? 500 : 20,
+  skip: () => isDev, // skip entirely in development
   message: { success: false, message: 'Too many auth attempts, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
