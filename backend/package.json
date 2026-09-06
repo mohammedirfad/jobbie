@@ -7,8 +7,10 @@
     "dev": "nodemon --exec tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "migrate": "tsx src/db/migrate.ts",
-    "seed": "tsx src/db/seed.ts"
+    "migrate": "node dist/db/migrate.js",
+    "seed": "node dist/db/seed.js",
+    "migrate:dev": "tsx src/db/migrate.ts",
+    "seed:dev": "tsx src/db/seed.ts"
   },
   "keywords": [],
   "author": "",

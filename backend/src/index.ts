@@ -22,7 +22,20 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      const allowed = process.env.CORS_ORIGIN || 'http://localhost:5173';
+      // Allow requests with no origin (mobile apps, curl, Postman)
+      if (!origin) return callback(null, true);
+      // Allow exact match
+      if (origin === allowed) return callback(null, true);
+      // Allow any Vercel preview deployment for this project
+      if (origin.match(/^https:\/\/hirenest(-[a-z0-9]+)?\.vercel\.app$/)) {
+        return callback(null, true);
+      }
+      // Allow localhost in development
+      if (origin.startsWith('http://localhost:')) return callback(null, true);
+      callback(new Error(`CORS: ${origin} not allowed`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
